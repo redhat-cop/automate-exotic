@@ -1,0 +1,12 @@
+Exotic Platforms for Ansible
+============================
+
+As the name suggests it's about pushing Ansible (and us) to its limits by making it work for exotic platforms, mostly planned as managed host, but why not also as control node...
+
+Following platforms are available:
+
+- link:android[android] (as managed host)
+
+Let us know if you'd like to add more platforms, for fun and learning.
+
+WARNING: the fact that a platform might work with Ansible doesn't mean that it's _supported_!
