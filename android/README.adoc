@@ -1,7 +1,7 @@
 AnsiDroid: Making Ansible work for Android
 ==========================================
 Eric Lavarde <elavarde@redhat.com>
-v1.0, 2018-07-10
+v1.1, 2018-07-10
 :toc:
 :toclevels: 3
 :numbered:
@@ -9,6 +9,15 @@ v1.0, 2018-07-10
 
 == Introduction ==
 
+The below instructions shows how to adapt and configure a quite plain Android-device so that it can be managed using https://www.ansible.com/[Ansible], an agent-less configuration management toolset using SSH and Python to configure Linux/UNIX-like hosts. Android using the Linux-Kernel, what can possibly go wrong here?
+
+Well, it was not a piece of cake but it's actually rather straightforward once you know how to do it:
+
+- get SSHd running (it's pre-installed on LineageOS!)
+- get Python compiled and installed
+- tweak here and there to get a more POSIX-conform setup
+
+And you're done, just read the details in the following chapters.
 
 == Prerequisites ==
 
@@ -20,6 +29,7 @@ There are surely multiple ways to make Ansible work with Android, but here were 
 - Toybox or Busybox (Toolbox isn't good enough, which might rule out older Android versions).
 - the adb utility on your Linux box (e.g. by installing the android-tools under Fedora)
 - Ansible 2.5+ (we made it work with 2.2 and 2.4 but it implies a slightly different approach from time to time)
+- enough Ansible and overall IT knowledge between chair and keyboard to follow the instructions
 
 == Prepare your Android device ==
 
@@ -192,7 +202,7 @@ $ sftp shell@ANDROIDIPADDRESS
 
 === Make SSHd start at boot ===
 
-It looks simple but it was possibly one of the most tedious aspects of the whole approach. From all what I've read, it becomes more easy if you build your own Android image, because you can then integrated SSHd into the init.d-process, but without this possibility I failed multiple approaches, among other reasons because of SELinux blocking the SSH-daemon from getting network access.
+It looks simple but it was possibly one of the most tedious aspects of the whole approach. From all what I've read, it becomes more easy if you build your own Android image, because you can then integrate SSHd into the init.d-process, but without this possibility I failed on multiple approaches, among other reasons because of SELinux blocking the SSH-daemon from getting network access.
 
 Anyway, the simplest approach was to follow http://lisas.de/%7Ealex/?p=209 linking to https://lisas.de/~alex/runuserinit.git which you can build using Android Studio. The app will then call all scripts found under `/data/local/userinit.d` at boot time. It requires once interaction on the screen of your Android-device to give the app root-access but then it works without issue.
 
