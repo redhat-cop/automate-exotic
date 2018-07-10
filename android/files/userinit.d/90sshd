@@ -1,0 +1,13 @@
+#!/system/bin/sh
+
+umask 077
+
+# DEBUG=1
+
+if [ "1" == "$DEBUG" ] ; then
+    # run sshd in debug mode and capture output to logcat
+    /system/bin/logwrapper /system/bin/sshd -f /data/ssh/sshd_config -D -d
+else
+    # don't daemonize - otherwise we can't stop the sshd service
+    /system/bin/sshd -f /data/local/sshd_config
+fi

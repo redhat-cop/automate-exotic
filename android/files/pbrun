@@ -1,0 +1,33 @@
+#!/system/xbin/bash
+# Simulate pbrun for Ansible to avoid overriding the real 'su' from Android
+# pbrun [-v][-n][-p][-d option] [-h hostname] [-u username] command [args ...]
+# Usage: su [options] [--] [-] [LOGIN] [--] [args...]
+# 
+# Options:
+#   --daemon                      start the su daemon agent
+#   -c, --command COMMAND         pass COMMAND to the invoked shell
+#   -h, --help                    display this help message and exit
+#   -, -l, --login                pretend the shell to be a login shell
+#   -m, -p,
+#   --preserve-environment        do not change environment variables
+#   -s, --shell SHELL             use SHELL instead of the default /system/bin/sh
+#   -v, --version                 display version number and exit
+#   -V                            display version code and exit,
+#                                 this is used almost exclusively by Superuser.apk
+
+while [ -n "$1" ]
+do
+	case "$1" in
+	-v|-n|-p) shift;;
+	-d|-h) shift && shift;;
+	-u) shift; user=$1; shift ;;
+	*) break;;
+	esac
+done
+
+if [ -n "${user}" ]
+then
+	exec su -c "$*" -- - ${user}
+else
+	exec su -c "$*"
+fi

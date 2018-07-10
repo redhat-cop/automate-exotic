@@ -1,0 +1,11 @@
+AnsiDroid, Thank You!
+=====================
+
+I probably forgot a few of them, but here are the helpful sources:
+
+- Jonas R. from the company k., with whom I discovered and solved a lot of the caveats, which wouldn't have been possible without his Android knowledge and experience.
+- the instructions on how to enable and configure SSHd were adapted from:
+* https://alainwolf.ch/en/tech-talk/ssh-cyanogenmod/
+* http://www.cromwell-intl.com/technical/samsung-galaxy/ssh.html
+* and can also similarly be found at http://lisas.de/~alex/?p=237 (including how to get SSHd to automatically start)
+- how to compile Python for Android is based on https://gist.github.com/phillipberndt/ef25e95ef801707eb27a

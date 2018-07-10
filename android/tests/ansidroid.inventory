@@ -1,0 +1,13 @@
+[android]
+# Android device while at home
+s4h ansible_host=192.168.1.208
+# Android device while at work
+s4w ansible_host=10.200.209.231
+s6w ansible_host=10.200.209.153
+
+[android:vars]
+ansible_user=shell
+ansible_become_method=pbrun
+#ansible_shell_executable=/system/xbin/bash
+ansible_python_interpreter=/data/data/com.android.shell/python/bin/python
+ansible_remote_tmp=/data/data/com.android.shell/.ansible/tmp

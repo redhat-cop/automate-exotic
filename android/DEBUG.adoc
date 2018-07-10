@@ -1,0 +1,32 @@
+Debugging Ansible on Android (or elsewhere)
+===========================================
+
+== Debug Ansible ==
+
+`ANSIBLE_KEEP_REMOTE_FILES=1` makes sure that remote temp files aren't removed, so that errors can be better analyzed as follows (`setup` is the name of the relevant module):
+
+------------------------------------------------------------------------
+/data/data/com.android.shell/.ansible/tmp/ansible-tmp-1493633303.39-251674279609972/setup.py explode # <1>
+/data/data/com.android.shell/.ansible/tmp/ansible-tmp-1493633303.39-251674279609972/debug_dir        # <2>
+/data/data/com.android.shell/.ansible/tmp/ansible-tmp-1493633303.39-251674279609972/setup.py execute # <3>
+------------------------------------------------------------------------
+<1> This expands the module into the following `debug_dir` directory.
+<2> In there you can check / modify the e.g. `ansible_module_setup.py` file.
+<3> And then try from the command line to execute the result.
+
+== Specific on Android ==
+
+`logcat` on Android is also a good place to look for issues.
+
+== Known errors ==
+
+This chapter is meant to capture errors encountered during development and/or tests and how they can be fixed.
+
+=== name 'temp_path' is not defined ===
+
+------------------------------------------------------------------------
+"module_stdout": "Traceback (most recent call last):\r\n  File \"/data/data/com.android.shell/.ansible/tmp/ansible-tmp-1495734814.37-142222317102674/setup.py\", line 136, in <module>\r\n    shutil.rmtree(temp_path)\r\nNameError: name 'temp_path' is not defined\r\n", 
+------------------------------------------------------------------------
+
+Either one of the TMPDIR, TEMP or TMP environment variables must be defined, or one of the directories common for the platform must exist (e.g. /tmp).
+

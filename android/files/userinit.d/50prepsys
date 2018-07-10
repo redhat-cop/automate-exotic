@@ -1,0 +1,21 @@
+#!/system/bin/sh
+
+umask 022
+
+if [ ! -e /bin ]
+then
+        mount -o rw,remount /
+        mkdir -p /bin
+        ln -s /system/bin/sh /bin/
+        ln -s /data/local/tmp /tmp
+        mount -o ro,remount /
+fi
+
+if [ ! -e /vendor/bin ]
+then
+        mount -o rw,remount /system
+        mkdir -p /vendor/bin
+        ln -s /data/local/bin/pbrun /vendor/bin/
+        ln -s /system/xbin/ps /vendor/bin/
+        mount -o ro,remount /system
+fi

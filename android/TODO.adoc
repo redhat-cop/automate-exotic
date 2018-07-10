@@ -1,0 +1,41 @@
+AnsiDroid, things to do
+=======================
+
+This file contains things which could be improved and/or added to the current approach.
+
+== Improving Python on Android ==
+
+- the Internet is full of more complex Python patches, which might make Python work better on Android:
+* http://www.srplab.com/en/files/others/compile/cross_compiling_python_for_android.html
+* and https://mdqinc.com/blog/2011/09/cross-compiling-python-for-android/
+* and https://danilogiulianelli.blogspot.com/2012/10/how-to-cross-compile-python-for-android.html
+- perhaps reuse more Python libraries from OS/2
+- transform the build script into an Ansible playbook
+- provide some simple smoke tests for Python
+- upgrade to Python 3.x
+
+== Start services without app ==
+
+Be able to start the SSHd service and prepare the system without having to use an app and interacting with it, would surely be a better approach, but might require building an own image.
+
+== Installing miscellaneous files ==
+
+What is currently being done manually could possibly be done with a simple(r) package that could install all the necessary files and scripts, setting the rights, etc...
+
+Based on http://fokke.org/site/content/howto-create-android-updatezip-package but taking examples from the LineageOS addonsu-package, few first ideas:
+
+------------------------------------------------------------------------
+mkdir SOMEDIR
+cd SOMEDIR
+mkdir -p META-INF/com/google/android/
+cp .../addonsu-arm-signed/META-INF/com/google/android/update-binary \
+	META-INF/com/google/android/
+cp .../addonsu-arm-signed/mount-system.sh .
+mkdir -p system/vendor/bin
+vi META-INF/com/google/android/updater-script
+------------------------------------------------------------------------
+
+== Better Android integration ==
+
+write an Ansible module using `pm` and `cmd package`.
+

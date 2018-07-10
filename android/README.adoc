@@ -1,0 +1,289 @@
+AnsiDroid: Making Ansible work for Android
+==========================================
+Eric Lavarde <elavarde@redhat.com>
+v1.0, 2018-07-10
+:toc:
+:toclevels: 3
+:numbered:
+:chapter-label:
+
+== Introduction ==
+
+
+== Prerequisites ==
+
+There are surely multiple ways to make Ansible work with Android, but here were the details I used for developing these instructions:
+
+- LineageOS 14.1, aka Android 7.1.2, on a Samsung Galaxy S6 SM-G920F
+- SELinux status is enforcing, device is rooted
+- Factory data reset
+- Toybox or Busybox (Toolbox isn't good enough, which might rule out older Android versions).
+- the adb utility on your Linux box (e.g. by installing the android-tools under Fedora)
+- Ansible 2.5+ (we made it work with 2.2 and 2.4 but it implies a slightly different approach from time to time)
+
+== Prepare your Android device ==
+
+=== Enable the developer features ===
+
+- Go to Settings -> About phone -> Build number (press many times)
+- Developer options are available:
+* Advanced reboot (or restart) -> ON
+* Root access -> Apps and ADB
+* Android debugging -> Enable ADB
+* Device hostname -> give a nicer hostname...
+* Local terminal -> ON
+- Connect the mobile over USB
+- `adb shell` (allow debug access on the phone)
+* `id` gives `shell` as result
+* `su -` works, you're root!
+- there is sshd (OpenSSH 7.1p2 but the tests started and worked with 6.4)
+
+=== Enable and configure SSHd ===
+
+- On the Android system:
+
+------------------------------------------------------------------------
+$ su -
+# mkdir /data/ssh
+# mkdir -p /data/data/com.android.shell/.ssh
+# chown shell.shell /data/data/com.android.shell/.ssh
+# chmod 700 /data/data/com.android.shell/.ssh
+------------------------------------------------------------------------
+
+- on Linux:
+
+------------------------------------------------------------------------
+$ cd ~/.ssh
+$ adb push id_rsa.pub /data/data/com.android.shell/.ssh/authorized_keys
+------------------------------------------------------------------------
+
+- on Android
+
+------------------------------------------------------------------------
+$ vim /data/data/com.android.shell/.ssh/authorized_keys
+environment="HOME=/data/data/com.android.shell",environment="TMPDIR=/data/local/tmp",environment="ANDROID_DATA=/data",environment="ANDROID_ROOT=/system" ssh-rsa XXXXetc...
+------------------------------------------------------------------------
+
+========================================================================
+NOTE: with this, we can create a file `/data/data/com.android.shell/.profile`, which is then executed when logging in as user `shell`. We can even add a `cd` command at the end to make sure that we're landing in our new home-directory. Sadly it doesn't have an influence on Ansible.
+========================================================================
+
+------------------------------------------------------------------------
+$ chmod 600 /data/data/com.android.shell/.ssh/authorized_keys
+$ su -
+# export TERM=xterm-256color	# or whatever you see fit
+# alias ll='ls -la'		# not necessary but it drives me crazy
+# cp /system/etc/ssh/sshd_config /data/ssh
+# chmod 600 /data/ssh/sshd_config
+# diff /system/etc/ssh/sshd_config /data/ssh/sshd_config
+--- /system/etc/ssh/sshd_config
++++ /data/local/sshd_config
+@@ -36,7 +36,7 @@
+
+-#PermitRootLogin yes
++PermitRootLogin no
+
+-AuthorizedKeysFile     /data/ssh/authorized_keys
++AuthorizedKeysFile     /data/data/com.android.shell/.ssh/authorized_keys
+
+-#PermitUserEnvironment no
++PermitUserEnvironment yes
+
+-#PidFile /var/run/sshd.pid
++PidFile /data/ssh/sshd.pid
+
+-Subsystem      sftp    /usr/libexec/sftp-server
++Subsystem      sftp    internal-sftp
+
+# mkdir /data/local/userinit.d
+# cp /system/bin/start-ssh /data/local/userinit.d/99sshd
+# chmod 755 /data/local/userinit.d/99sshd
+# diff -u /system/bin/start-ssh /data/local/userinit.d/99sshd
+--- /system/bin/start-ssh
++++ /data/local/userinit.d/99sshd
+@@ -8,7 +8,7 @@
+ DSA_PUB_KEY=/data/ssh/ssh_host_dsa_key.pub
+ RSA_KEY=/data/ssh/ssh_host_rsa_key
+ RSA_PUB_KEY=/data/ssh/ssh_host_rsa_key.pub
+-AUTHORIZED_KEYS=/data/ssh/authorized_keys
++AUTHORIZED_KEYS=/data/data/com.android.shell/.ssh/authorized_keys
+ DEFAULT_AUTHORIZED_KEYS=/system/etc/security/authorized_keys.default
+ 
+ if [ ! -f $DSA_KEY ]; then
+@@ -30,8 +30,8 @@
+ 
+ if [ "1" == "$DEBUG" ] ; then
+     # run sshd in debug mode and capture output to logcat
+-    /system/bin/logwrapper /system/bin/sshd -f /system/etc/ssh/sshd_config -D -d
++    /system/bin/logwrapper /system/bin/sshd -f /data/ssh/sshd_config -D -d
+ else
+     # don't daemonize - otherwise we can't stop the sshd service
+-    /system/bin/sshd -f /system/etc/ssh/sshd_config -D
++    /system/bin/sshd -f /data/ssh/sshd_config
+ fi
+
+# mkdir /data/ssh/empty
+# chmod 700 /data/ssh/empty
+------------------------------------------------------------------------
+
+=== Final OS tweaks ===
+
+As `/vendor` is a link to `/system/vendor`, we just need to push our binaries to `/system/vendor/bin` to have them come in front of all others.
+
+On Android, we create a `pbrun` executable, because:
+
+. `su root -c etc` doesn't work with Android's `su` command.
+. the quoting used by Ansible with `pfexec` doesn't work with su.
+. So we fake `pbrun` which seems else the easiest to fake, without "overloading" `su`.
+
+------------------------------------------------------------------------
+$ su -
+# mkdir /data/local/bin
+# vim /data/local/bin/pbrun	# see pbrun script in the repository
+# chmod -R a+rx,a-w /data/local/bin
+------------------------------------------------------------------------
+
+We then need to tweak a bit more the environment and we need to make sure that it stays in place after a reboot, so we add a boot / userinit script called e.g. `/data/local/userinit.d/50prepsys`:
+
+------------------------------------------------------------------------
+#!/system/bin/sh
+
+umask 022
+
+if [ ! -e /bin ]
+then
+        mount -o rw,remount /
+        mkdir -p /bin
+        ln -s /system/bin/sh /bin/                                # <1>
+        ln -s /data/local/tmp /tmp                                # <2>
+        mount -o ro,remount /
+fi
+
+if [ ! -e /vendor/bin ]
+then
+        mount -o rw,remount /system
+        mkdir -p /vendor/bin
+        ln -s /data/local/bin/pbrun /vendor/bin/                  # <3>
+        ln -s /system/xbin/ps /vendor/bin/                        # <4>
+        mount -o ro,remount /system
+fi
+------------------------------------------------------------------------
+<1> It is theoretically possible to overwrite the default shell using the `ansible_shell_executable` variable but there are https://github.com/ansible/ansible/issues/23291[issues] with this.
+<2> In different places, Ansible relies on a writable HOME directory and/or on a TMPDIR/TMP/TEMP environment variable pointing to an existing and writable directory, or it uses one of the standard repositories (`/tmp` being one of them).
+<3> We created our pbrun manually and now need to make sure it's in the PATH directory.
+<4> As the default `/system/bin/ps` is very limited but `/system/xbin/ps` is complete (and good enough for the `setup` module of Ansible), we put a link into the `/sbin` directory.
+
+=== Test the SSH setup ===
+
+- Call manually both init scripts as root on the Android device, and note the IP address:
+
+------------------------------------------------------------------------
+# /data/local/userinit.d/50prepsys
+# /data/local/userinit.d/99sshd
+# ip a # check the IP address
+------------------------------------------------------------------------
+
+- on Linux, test the setup:
+
+------------------------------------------------------------------------
+$ ssh shell@ANDROIDIPADDRESS
+$ sftp shell@ANDROIDIPADDRESS
+------------------------------------------------------------------------
+
+=== Make SSHd start at boot ===
+
+It looks simple but it was possibly one of the most tedious aspects of the whole approach. From all what I've read, it becomes more easy if you build your own Android image, because you can then integrated SSHd into the init.d-process, but without this possibility I failed multiple approaches, among other reasons because of SELinux blocking the SSH-daemon from getting network access.
+
+Anyway, the simplest approach was to follow http://lisas.de/%7Ealex/?p=209 linking to https://lisas.de/~alex/runuserinit.git which you can build using Android Studio. The app will then call all scripts found under `/data/local/userinit.d` at boot time. It requires once interaction on the screen of your Android-device to give the app root-access but then it works without issue.
+
+. Download Android Studio from https://developer.android.com/studio/ 
+. Unpack the ZIP file, it'll go in a sub-directory `android-studio` 
+. Start with `android-studio/bin/studio.sh` and complete the installation 
+.. Select Custom to be able to change the Android SdK location 
+.. Don't go back, it seems to break the installation and the SdK won't get installed 
+.. Check out project from Version Control (from Git) 
+.. Use https://lisas.de/~alex/runuserinit.git as URL for the Git-repo 
+.. Accept to open the build.gradle project file 
+.. the sync fails, 
+... Click on "install missing platform(s) and sync project" 
+... Click on "Install Build Tools 22.0.1 and sync project" 
+... Sync fails again with "Gradle sync failed: Unsupported method: BaseConfig.getApplicationIdSuffix().", open build.gradle and set `classpath 'com.android.tools.build:gradle:2.3.2'` then re-sync using the menu _File -> Sync project with gradle files_. 
+... Click on "Fix Gradle wrapper and re-import project Gradle settings" 
+... Click on "Install Build Tools 25.0.0, update version in build file and sync project" 
+... Here we skip the recommended Gradle Plugin Upgrade (it was possibly a loss of time)... 
+.. Menu _Build -> Build APK(s)_ fails (again) but succeeds after you've clicked on "Fix Gradle wrapper and re-import project". 
+.. You can then run the app on your mobile (allow USB debugging), it doesn't really matter if you have Instant Run or not but I used the chance to get the platform fitting my smartphone being automatically installed (Platform 25, revision 3, in my case). 
+.. start the App once and accept to give root access forever.
+
+Reboot the device, check that SSH is still working and that the 50prepsys-script has done it's job, then you're done!
+
+== Test Ansible in raw mode ==
+
+On the control host try the following (have a look at the `ansible.cfg` and the `ansidroid.inventory` test files and adapt them to your needs, especially the IP address):
+
+------------------------------------------------------------------------
+$ cd tests\
+$ vim ansidroid.inventory # adapt to your needs)
+s6 ansible_host=ANDROIDIPADDRESS ansible_user=shell [...]
+$ ansible -m raw -a id s6
+[...]
+uid=2000(shell) gid=2000(shell) groups=1003(graphics),1004(input),1007(log),1009(mount),1015(sdcard_rw),1028(sdcard_r),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats) context=u:r:sudaemon:s0
+[...]
+------------------------------------------------------------------------
+
+We try the become approach to become root:
+
+------------------------------------------------------------------------
+$ vim ansidroid.inventory
+s6 ansible_host=192.168.1.208 ansible_user=shell ansible_become_method=pbrun
+$ ansible -i ansidroid.inventory -m raw -a id -b s6
+[...]
+uid=0(root) gid=0(root) context=u:r:sudaemon:s0
+[...]
+------------------------------------------------------------------------
+
+== Get Python on Android ==
+
+=== Build Python for Android ===
+
+- Install Android Studio if you've not done so before (see above).
+- Once installed, go to 'Tools -> SDK Manager -> SDK Tools', select 'NDK' and click 'Apply' to install the NDK necessary to compile Python for Android.
+- Download and make the script `buildpython4android.sh` executable. You may adapt it to your needs, especially the path to the NDK and the Python version (I tried 2.7.9, 2.7.13/15, all worked). You might also need to adapt the architecture and the Android API version, which is arm64 respectively 24 for now (there is no binary 25 API version).
+- Call the script in an empty directory, and be patient.
+- The result is an archive `python4android-2.7.15-arm64-24.tgz` with a compiled version of Python.
+
+=== Push and install Python on Android ===
+
+------------------------------------------------------------------------
+sftp ANDROIDIPADDRESS
+cd /data/local/tmp
+put python4android-2.7.15-arm64-24.tgz
+exit
+
+ssh ANDROIDIPADDRESS
+su -
+mkdir /data/data/com.android.shell/python
+cd /data/data/com.android.shell/python
+tar xvzf /data/local/tmp/python4android-2.7.15-arm64-24.tgz
+cd ..
+chmod -R go-w python
+chmod -R go+rX python
+chown -R root.root python
+restorecon -Rv /data/data/com.android.shell/python
+------------------------------------------------------------------------
+
+- We could have extracted the tgz-file to something like `/data/local/python`, which would have been a path easier to handle, but then we'd have to explicitly set the SELinux attribute, e.g. with `find /data/local/python | xargs setfattr -n security.selinux -v "u:object_r:shell_data_file:s0"`, and hope that nobody/nothing will call `restorecon`, which would keep non-root users, especially 'shell', from using python.
+- Check that `/data/data/com.android.shell/python/bin/python --version` works as shell-user, call it then interactively and make some checks.
+
+== Test Ansible full-blown ==
+
+You're almost done; the following command shows that the main tasks / modules work properly:
+
+------------------------------------------------------------------------
+cd tests/
+ansible-playbook -l s6 test_android_playbook.yml -v
+------------------------------------------------------------------------
+
+If everything is green, you're done: CONGRATULATIONS!
+
+NOTE: it doesn't mean that all modules or all functionalities of Ansible do work properly, but experience shows that it's the basis for making Ansible usable, and for fixing the platform for Ansible through Ansible. In other words, if a specific module doesn't work without modifying your device, you should be able with this basis do the necessary changes remotely using Ansible itself.

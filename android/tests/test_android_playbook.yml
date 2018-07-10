@@ -1,0 +1,51 @@
+- name: test machine
+  hosts: all
+  vars:
+    tmp_dir: /data/local/tmp
+  tasks:
+    - name: call ping
+      ping:
+    - name: run explicitly setup
+      setup:
+
+    - name: run debug
+      debug:
+        msg: yay
+    - name: fail maybe
+      fail:
+        msg: nay
+      when: False
+    - name: set a fact
+      set_fact:
+        one_fact: "something"
+
+    - name: copy a file
+      copy:
+        src: test_file_to_copy
+        dest: "{{ tmp_dir }}/ansidroid_copied_test_file"
+    - name: synchronize a file
+      synchronize:
+        src: test_file_to_sync
+        dest: "{{ tmp_dir }}/ansidroid_synced_test_file"
+    - name: create a directory
+      file:
+        path: "{{ tmp_dir }}/ansidroid_created_test_dir"
+        state: directory
+    - name: create a file from a template and some facts
+      template:
+        src: test_android_template.conf.j2
+        dest: "{{ tmp_dir }}/ansidroid_templated_test_file"
+
+    - name: run uptime as command
+      command: uptime
+    - name: run ps as raw command
+      raw: ps -ef
+    - name: run a shell as shell user
+      shell: echo please create this test file for AnsiDroid > {{ tmp_dir }}/ansidroid_created_test_dir/test_file
+      args:
+        executable: "{{ ansible_shell_executable }}"
+    - name: run a shell as root user
+      shell: id -n > {{ tmp_dir }}/ansidroid_created_test_dir/i_am_root
+      args:
+        executable: "{{ ansible_shell_executable }}"
+      become: yes
